@@ -1,11 +1,99 @@
 import sys
-import getpass
+import os
+import json
+from dotenv import load_dotenv
 from auth import SessionLocal, get_password_hash, User
 from sqlalchemy.exc import IntegrityError
 
-def create_user():
-    """Create a new user via command line."""
-    print("=== Create Backdoor Admin User ===")
+# Load environment variables
+load_dotenv()
+
+def create_user_from_env():
+    """Create users from environment variables."""
+    print("=== Creating Users from Environment ===")
+    
+    # Get users from environment variable
+    users_json = os.getenv("BACKDOOR_USERS")
+    if not users_json:
+        print(">> No users found in BACKDOOR_USERS environment variable")
+        print("Please set BACKDOOR_USERS in your .env file")
+        sys.exit(1)
+    
+    try:
+        users = json.loads(users_json)
+        if not isinstance(users, list):
+            print(">> BACKDOOR_USERS must be a JSON array/list")
+            sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f">> Invalid JSON in BACKDOOR_USERS: {e}")
+        sys.exit(1)
+    
+    if not users:
+        print(">> No users defined in BACKDOOR_USERS")
+        return
+    
+    db = SessionLocal()
+    created_count = 0
+    skipped_count = 0
+    
+    for user_data in users:
+        username = user_data.get("username", "").strip()
+        password = user_data.get("password", "").strip()
+        
+        if not username:
+            print(f"Skipping user with empty username")
+            skipped_count += 1
+            continue
+        
+        if not password:
+            print(f"Skipping user '{username}' with empty password")
+            skipped_count += 1
+            continue
+        
+        try:
+            # Check if user already exists
+            existing_user = db.query(User).filter(User.username == username).first()
+            if existing_user:
+                print(f"User '{username}' already exists, skipping...")
+                skipped_count += 1
+                continue
+            
+            # Create new user
+            hashed_password = get_password_hash(password)
+            user = User(
+                username=username,
+                hashed_password=hashed_password,
+                is_active=1
+            )
+            
+            db.add(user)
+            db.commit()
+            print(f">> Created user: {username}")
+            created_count += 1
+            
+        except IntegrityError:
+            db.rollback()
+            print(f"User '{username}' already exists, skipping...")
+            skipped_count += 1
+        except Exception as e:
+            db.rollback()
+            print(f"❌ Error creating user '{username}': {e}")
+            skipped_count += 1
+    
+    db.close()
+    
+    print(f"\n>> Summary:")
+    print(f"  Created: {created_count} user(s)")
+    print(f"  Skipped: {skipped_count} user(s)")
+    
+    if created_count > 0:
+        print("\nUsers created successfully!")
+    else:
+        print("\nNo new users were created")
+
+def create_user_interactive():
+    """Create a new user via command line (fallback)."""
+    print("=== Create Backdoor Admin User (Interactive) ===")
     
     username = input("Username: ").strip()
     if not username:
@@ -35,9 +123,7 @@ def create_user():
         db.add(user)
         db.commit()
         
-        print(f"\n✅ User '{username}' created successfully!")
-        print("\nYou can now run the application with:")
-        print("  uvicorn main:app --host 0.0.0.0 --port 8001")
+        print(f"\nUser '{username}' created successfully!")
         
     except IntegrityError:
         db.rollback()
@@ -51,4 +137,10 @@ def create_user():
         db.close()
 
 if __name__ == "__main__":
-    create_user()
+    # Check if we should use env or interactive mode
+    if os.getenv("BACKDOOR_USERS"):
+        create_user_from_env()
+    else:
+        # Fallback to interactive mode if no env var
+        import getpass
+        create_user_interactive()
