@@ -11,9 +11,9 @@ import mimetypes
 from PIL import Image
 import io
 import base64
-from typing import Optional
 from pydantic import BaseModel
 from jose import jwt, JWTError
+import uvicorn
 
 from auth import (
     authenticate_user, 
@@ -636,5 +636,4 @@ async def move_item(
         raise HTTPException(status_code=500, detail=f"Move failed: {str(e)}")
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8001, forwarded_allow_ips="*")
