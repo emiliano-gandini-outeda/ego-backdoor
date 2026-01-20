@@ -15,3 +15,21 @@
 - All routes (except `/login`) require authentication
 - Prevents path traversal and unauthorized access
 - Intended for private, non-public use
+
+## Config
+
+To change max file size (10GB default):
+
+In `config.py`:
+```python
+# Change this
+MAX_FILE_SIZE = 1024 * 1024 * 1024 * 10
+```
+And in `templates/dashboard.html`:
+```js
+function validateFile(file) {
+    // Change this
+    const maxSize = 1024 * 1024 * 1024 * 10; // 10GB
+    ...
+}
+```
