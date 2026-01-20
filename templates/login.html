@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Backdoor Admin{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-header">
+            <i class="fas fa-lock login-icon"></i>
+            <h1>Backdoor Admin</h1>
+            <p class="login-subtitle">Secure File Management</p>
+        </div>
+        
+        <form id="loginForm" class="login-form">
+            <div class="form-group">
+                <label for="username">
+                    <i class="fas fa-user"></i> Username
+                </label>
+                <input type="text" id="username" name="username" required autocomplete="username">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">
+                    <i class="fas fa-key"></i> Password
+                </label>
+                <input type="password" id="password" name="password" required autocomplete="current-password">
+            </div>
+            
+            <button type="submit" class="login-button">
+                <i class="fas fa-sign-in-alt"></i> Sign In
+            </button>
+            
+            <div id="loginError" class="error-message" style="display: none;"></div>
+        </form>
+        
+        <div class="login-footer">
+            <p><i class="fas fa-shield-alt"></i> Secure Internal System</p>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const username = formData.get('username');
+    const password = formData.get('password');
+    
+    const button = this.querySelector('button');
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in...';
+    button.disabled = true;
+    
+    try {
+        const response = await fetch('/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            // Store token
+            localStorage.setItem('access_token', data.access_token);
+            // Redirect to dashboard
+            window.location.href = '/dashboard';
+        } else {
+            const error = await response.json();
+            showError(error.detail || 'Login failed');
+        }
+    } catch (error) {
+        showError('Network error. Please try again.');
+    } finally {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+});
+
+function showError(message) {
+    const errorDiv = document.getElementById('loginError');
+    errorDiv.textContent = message;
+    errorDiv.style.display = 'block';
+    
+    // Hide error after 5 seconds
+    setTimeout(() => {
+        errorDiv.style.display = 'none';
+    }, 5000);
+}
+</script>
+{% endblock %}

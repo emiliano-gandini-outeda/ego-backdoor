@@ -1,0 +1,2241 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Backdoor Admin{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div class="logo">
+                <i class="fas fa-terminal"></i>
+                <h1>Backdoor Admin</h1>
+            </div>
+            <nav class="breadcrumb">
+                <a href="/dashboard" class="breadcrumb-item">root</a>
+                {% if current_path %}
+                    <span class="breadcrumb-separator">/</span>
+                    <span class="breadcrumb-item current">{{ current_path }}</span>
+                {% endif %}
+            </nav>
+        </div>
+        <div class="header-right">
+            <div class="user-info">
+                <i class="fas fa-user-circle"></i>
+                <span>{{ username }}</span>
+            </div>
+            <button onclick="location.href='/logout'" class="logout-button">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <h3><i class="fas fa-folder"></i> File Operations</h3>
+                <button class="sidebar-button" onclick="showUploadModal()">
+                    <i class="fas fa-upload"></i> Upload File
+                </button>
+                <button class="sidebar-button" onclick="showCreateFolderModal()">
+                    <i class="fas fa-folder-plus"></i> New Folder
+                </button>
+                <button class="sidebar-button" onclick="refreshFiles()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3><i class="fas fa-info-circle"></i> Info</h3>
+                <div class="info-item">
+                    <span>Max File Size:</span>
+                    <strong>1 GB</strong>
+                </div>
+                <div class="info-item">
+                    <span>Files in dir:</span>
+                    <strong id="fileCount">0</strong>
+                </div>
+                <div class="info-item">
+                    <span>Total Size:</span>
+                    <strong id="totalSize">0 B</strong>
+                </div>
+            </div>
+        </aside>
+
+        <!-- File Browser -->
+        <section class="file-browser" id="fileBrowser">
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="path-navigation">
+                    {% if parent_path %}
+                    <button onclick="navigateTo('{{ parent_path }}')" class="nav-button previous-folder">
+                        <i class="fas fa-arrow-left"></i> Previous
+                    </button>
+                    {% endif %}
+                    <button onclick="navigateToParent()" class="nav-button" id="parentButton" style="display: none;">
+                        <i class="fas fa-level-up-alt"></i> Up
+                    </button>
+                </div>
+                <div class="view-controls">
+                    <button onclick="setView('grid')" class="view-button active" data-view="grid">
+                        <i class="fas fa-th"></i>
+                    </button>
+                    <button onclick="setView('list')" class="view-button" data-view="list">
+                        <i class="fas fa-list"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Files Grid -->
+            <div class="files-grid" id="filesGrid">
+                <!-- Files will be loaded here via JavaScript -->
+                <div class="loading">
+                    <i class="fas fa-spinner fa-spin"></i> Loading files...
+                </div>
+            </div>
+
+            <!-- File Preview Sidebar -->
+            <div class="preview-sidebar" id="previewSidebar">
+                <div class="preview-header">
+                    <h3><i class="fas fa-file"></i> Preview</h3>
+                    <button onclick="hidePreview()" class="close-preview">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="preview-content" id="previewContent">
+                    <div class="no-preview">
+                        <i class="fas fa-file-alt"></i>
+                        <p>Select a file to preview</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<!-- Upload Modal -->
+<div id="uploadModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-upload"></i> Upload File</h3>
+            <button onclick="closeUploadModal()" class="modal-close">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="fileInput">Select File (max 10GB)</label>
+                    <input type="file" id="fileInput" name="file" required 
+                           onchange="handleFileSelect()">
+                </div>
+                
+                <!-- File info preview -->
+                <div id="filePreview" style="display: none; margin-bottom: 20px;">
+                    <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--bg-secondary); border-radius: var(--radius);">
+                        <i id="filePreviewIcon" class="fas fa-file" style="font-size: 24px; color: var(--accent);"></i>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; color: var(--text-primary);" id="fileNamePreview"></div>
+                            <div style="font-size: 12px; color: var(--text-secondary);" id="fileSizePreview"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Progress bar section -->
+                <div id="progressSection" style="display: none;">
+                    <div class="upload-status">
+                        <div class="progress-container">
+                            <div class="progress-bar" id="progressBar">
+                                <span class="progress-text" id="progressText">0%</span>
+                            </div>
+                        </div>
+                        <div class="upload-details">
+                            <span id="uploadSpeed">Speed: --</span>
+                            <span id="uploadTime">Time: --</span>
+                        </div>
+                    </div>
+                    
+                    <div id="uploadSuccess" class="upload-success">
+                        <i class="fas fa-check-circle"></i> File uploaded successfully!
+                    </div>
+                    
+                    <div id="uploadError" class="upload-error">
+                        <i class="fas fa-exclamation-circle"></i> <span id="errorMessage">Upload failed</span>
+                    </div>
+                </div>
+                
+                <div class="form-actions" id="uploadActions">
+                    <button type="button" onclick="closeUploadModal()" class="cancel-button">
+                        Cancel
+                    </button>
+                    <button type="submit" class="upload-button" id="uploadSubmitBtn">
+                        <i class="fas fa-upload"></i> Upload
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Create Folder Modal -->
+<div id="createFolderModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-folder-plus"></i> Create New Folder</h3>
+            <button onclick="closeModal('createFolderModal')" class="modal-close">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <form id="createFolderForm">
+                <div class="form-group">
+                    <label for="folderName">Folder Name</label>
+                    <input type="text" id="folderName" name="folderName" required 
+                        pattern="^[^\\/:*?\"<>|]*$" 
+                        title="Folder name cannot contain \ / : * ? &quot; < > |">
+                </div>
+                <div class="form-actions">
+                    <button type="button" onclick="closeModal('createFolderModal')" class="cancel-button">
+                        Cancel
+                    </button>
+                    <button type="submit" class="create-button">
+                        <i class="fas fa-plus"></i> Create
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-trash-alt"></i> Confirm Delete</h3>
+            <button onclick="closeModal('deleteModal')" class="modal-close">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <p>Are you sure you want to delete <strong id="deleteFileName"></strong>?</p>
+            <p class="warning-text"><i class="fas fa-exclamation-triangle"></i> This action cannot be undone.</p>
+            <div class="form-actions">
+                <button type="button" onclick="closeModal('deleteModal')" class="cancel-button">
+                    Cancel
+                </button>
+                <button type="button" onclick="confirmDelete()" class="delete-button">
+                    <i class="fas fa-trash-alt"></i> Delete
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Move Modal -->
+<div id="moveModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-arrows-alt"></i> Move Item</h3>
+            <button onclick="closeModal('moveModal')" class="modal-close">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <!-- Move Header -->
+            <div class="move-header">
+                <div class="move-target-info">
+                    <i class="fas fa-file"></i>
+                    <span>Moving: <strong id="moveFileName"></strong></span>
+                </div>
+                <div class="move-breadcrumb" id="moveBreadcrumb">
+                    <div class="breadcrumb-item-move" data-path="" onclick="navigateTreeTo('')">
+                        <i class="fas fa-home"></i>
+                        <span>Root</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Search Bar -->
+            <div class="move-search">
+                <div class="search-container">
+                    <div style="position: relative; flex: 1;">
+                        <input type="text" 
+                               class="search-input" 
+                               id="treeSearch" 
+                               placeholder="Search folders..." 
+                               oninput="filterFolders(this.value)">
+                        <div class="search-icon">
+                            <i class="fas fa-search"></i>
+                        </div>
+                    </div>
+                    <button type="button" 
+                            class="create-folder-btn" 
+                            onclick="showCreateFolderInTree()">
+                        <i class="fas fa-folder-plus"></i>
+                        New Folder
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Folder Tree Container -->
+            <div class="folder-tree-container">
+                <!-- Tree Header -->
+                <div class="tree-header">
+                    <span>FOLDERS</span>
+                    <span class="folder-count" id="folderCount">0 folders</span>
+                </div>
+                
+                <!-- Tree Content -->
+                <div class="folder-tree-content">
+                    <div class="folder-tree-wrapper" id="folderTreeWrapper">
+                        <div class="folder-tree-loading" id="treeLoading">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <span>Loading folders...</span>
+                        </div>
+                        <!-- Folders will be loaded here -->
+                    </div>
+                </div>
+                
+                <!-- Create Folder Input -->
+                <div class="create-folder-input-container" id="createFolderInputContainer">
+                    <div class="create-folder-input-wrapper">
+                        <input type="text" 
+                               class="create-folder-input" 
+                               id="newFolderName" 
+                               placeholder="Enter folder name..."
+                               onkeypress="handleFolderInputKeyPress(event)">
+                        <div class="create-folder-actions">
+                            <button type="button" 
+                                    class="create-folder-confirm"
+                                    onclick="confirmCreateFolderInTree()">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            <button type="button" 
+                                    class="create-folder-cancel"
+                                    onclick="cancelCreateFolderInTree()">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Selected Folder Display -->
+            <div class="selected-folder-section" id="selectedFolderSection" style="display: none;">
+                <div class="selected-folder-icon">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="selected-folder-info">
+                    <div class="selected-folder-label">Moving to:</div>
+                    <div class="selected-folder-path" id="selectedFolderPath">/</div>
+                </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="form-actions">
+                <button type="button" 
+                        onclick="closeModal('moveModal')" 
+                        class="cancel-button">
+                    Cancel
+                </button>
+                <button type="button" 
+                        onclick="confirmMove()" 
+                        class="create-button" 
+                        id="moveConfirmBtn" 
+                        disabled>
+                    <i class="fas fa-check"></i> Move Here
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="notificationContainer" class="notification-container"></div>
+
+<script>
+let currentPath = "{{ current_path }}";
+let currentView = localStorage.getItem('view') || 'grid';
+let fileToDelete = null;
+let itemToMove = null;
+let moveItemIsDir = false;
+let selectedFolderPath = '';
+let activeModal = null;
+let uploadStartTime = null;
+let uploadLoaded = 0;
+let uploadTotal = 0;
+let uploadXHR = null;
+let uploadSpeedInterval = null;
+let currentTreePath = '';
+let treeData = [];
+let filteredTreeData = [];
+let creatingNewFolder = false;
+
+
+// Check if file is previewable
+function isPreviewable(extension) {
+    const previewable = [
+        '.txt', '.py', '.js', '.html', '.css', '.json', '.xml', 
+        '.yaml', '.yml', '.md', '.sh', '.bash', '.php', '.java',
+        '.cpp', '.c', '.h', '.go', '.rs', '.rb',
+        '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp',
+        '.pdf', '.doc', '.docx'
+    ];
+    return previewable.includes(extension.toLowerCase());
+}
+
+// Debounce function
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Throttle function
+function throttle(func, limit) {
+    let inThrottle;
+    return function() {
+        const args = arguments;
+        const context = this;
+        if (!inThrottle) {
+            func.apply(context, args);
+            inThrottle = true;
+            setTimeout(() => inThrottle = false, limit);
+        }
+    };
+}
+
+// File validation
+function validateFile(file) {
+    const maxSize = 1024 * 1024 * 1024 * 10; // 10GB
+    const allowedTypes = [
+        // Images
+        'image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp', 'image/bmp',
+        // Documents
+        'application/pdf', 'application/msword', 
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'text/plain', 'text/html', 'text/css', 'text/javascript',
+        'application/json', 'application/xml',
+        // Archives
+        'application/zip', 'application/x-tar', 'application/gzip', 'application/x-7z-compressed',
+        // Code
+        'application/x-python-code', 'text/x-python', 'text/x-shellscript',
+        // Audio/Video
+        'audio/mpeg', 'video/mp4',
+    ];
+    
+    if (file.size > maxSize) {
+        return { valid: false, error: 'File size exceeds 10GB limit' };
+    }
+    
+    // Check MIME type if available
+    if (file.type && !allowedTypes.includes(file.type) && file.type !== '') {
+        // For now, accept all files since MIME type detection isn't always accurate
+        console.warn('File type not in allowed list:', file.type);
+    }
+    
+    return { valid: true };
+}
+
+/* Notifications */
+
+function showNotification(type, title, message, duration = 5000) {
+    const container = document.getElementById('notificationContainer');
+    if (!container) return;
+    
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    
+    // Icons for different notification types
+    const icons = {
+        success: 'fas fa-check-circle',
+        error: 'fas fa-exclamation-circle',
+        warning: 'fas fa-exclamation-triangle',
+        info: 'fas fa-info-circle'
+    };
+    
+    notification.innerHTML = `
+        <div class="notification-content">
+            <div class="notification-title">
+                <i class="${icons[type] || icons.info}"></i>
+                ${title}
+            </div>
+            <div class="notification-message">${message}</div>
+        </div>
+        <button class="notification-close" onclick="removeNotification(this)">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    container.appendChild(notification);
+    
+    // Auto-remove after duration
+    const autoRemove = setTimeout(() => {
+        removeNotification(notification.querySelector('.notification-close'));
+    }, duration);
+    
+    // Store timeout ID for cleanup
+    notification.dataset.timeoutId = autoRemove;
+    
+    return notification;
+}
+
+function removeNotification(button) {
+    const notification = button.closest('.notification');
+    if (!notification) return;
+    
+    // Clear auto-remove timeout
+    if (notification.dataset.timeoutId) {
+        clearTimeout(parseInt(notification.dataset.timeoutId));
+    }
+    
+    // Add hiding animation
+    notification.classList.add('hiding');
+    
+    // Remove after animation completes
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+        }
+    }, 300);
+}
+
+// Modal management
+const ModalManager = {
+    activeModal: null,
+    
+    show(modalId) {
+        this.hide();
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.style.display = 'block';
+            this.activeModal = modal;
+            document.body.style.overflow = 'hidden';
+        }
+    },
+    
+    hide() {
+        if (this.activeModal) {
+            this.activeModal.style.display = 'none';
+            this.activeModal = null;
+            document.body.style.overflow = '';
+        }
+    },
+    
+    hideAll() {
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.style.display = 'none';
+        });
+        this.activeModal = null;
+        document.body.style.overflow = '';
+    }
+};
+
+// Keyboard shortcuts
+function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        // Close modal on Escape
+        if (e.key === 'Escape') {
+            ModalManager.hideAll();
+        }
+        
+        // Refresh on F5
+        if (e.key === 'F5') {
+            e.preventDefault();
+            window.location.reload();
+        }
+        
+        // New folder on Ctrl+Shift+N
+        if (e.ctrlKey && e.shiftKey && e.key === 'N') {
+            e.preventDefault();
+            showCreateFolderModal();
+        }
+        
+        // Upload on Ctrl+U
+        if (e.ctrlKey && e.key === 'u') {
+            e.preventDefault();
+            showUploadModal();
+        }
+    });
+}
+
+
+// Check authentication on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Setup keyboard shortcuts
+    setupKeyboardShortcuts();
+    
+    checkAuth();
+    loadFiles(currentPath);
+    setView(currentView);
+    
+    // Set up event listeners
+    document.getElementById('uploadForm').addEventListener('submit', handleUpload);
+    document.getElementById('createFolderForm').addEventListener('submit', handleCreateFolder);
+    
+    // Setup modal click handlers
+    setupModalClickHandlers();
+    
+    // Close modals when clicking outside
+    window.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal')) {
+            ModalManager.hideAll();
+        }
+    });
+    
+    // Add loading state to all buttons with async actions
+    document.addEventListener('submit', async (e) => {
+        const form = e.target;
+        if (form.method === 'post' || form.method === 'POST') {
+            const button = form.querySelector('button[type="submit"]');
+            if (button) {
+                const originalText = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+                button.disabled = true;
+                
+                // Re-enable button after 30 seconds if something goes wrong
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                }, 30000);
+            }
+        }
+    });
+    
+    console.log('Backdoor Admin initialized');
+});
+
+// Show upload modal with file pre-selected
+function showUploadModalWithFile(file) {
+    showUploadModal();
+    
+    // Set the file input to the dropped file
+    setTimeout(() => {
+        const fileInput = document.getElementById('fileInput');
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        fileInput.files = dataTransfer.files;
+        
+        // Trigger change event
+        fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }, 100);
+}
+
+// Check if user is authenticated
+async function checkAuth() {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        window.location.href = '/login';
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/files', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (response.status === 401) {
+            localStorage.removeItem('access_token');
+            window.location.href = '/login';
+        }
+    } catch (error) {
+        console.error('Auth check failed:', error);
+        window.location.href = '/login';
+    }
+}
+
+// Setup click handlers for modals
+function setupModalClickHandlers() {
+    // Close modals when clicking outside
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal(this.id);
+            }
+        });
+    });
+    
+    // Close modals with Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && activeModal) {
+            closeModal(activeModal);
+        }
+    });
+}
+
+async function loadFiles(path) {
+    const grid = document.getElementById('filesGrid');
+    grid.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading files...</div>';
+    
+    try {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+        
+        const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (response.status === 401) {
+            localStorage.removeItem('access_token');
+            window.location.href = '/login';
+            return;
+        }
+        
+        const data = await response.json();
+        displayFiles(data.items);
+        document.getElementById('fileCount').textContent = data.items.length;
+        
+        // Calculate and display total size
+        const totalSize = data.items.reduce((sum, item) => sum + (item.size || 0), 0);
+        document.getElementById('totalSize').textContent = formatFileSize(totalSize);
+        
+        currentPath = data.current_path;
+        
+        // Update breadcrumb
+        updateBreadcrumb(data.current_path);
+        
+        // Show/hide parent button based on current path
+        updateParentButton(data.current_path);
+        
+    } catch (error) {
+        grid.innerHTML = `<div class="error">Error loading files: ${error.message}</div>`;
+    }
+}
+
+// Update parent button visibility
+function updateParentButton(currentPath) {
+    const parentButton = document.getElementById('parentButton');
+    const previousButton = document.querySelector('.previous-folder');
+    
+    // Hide the template-based previous button if it exists
+    if (previousButton) {
+        previousButton.style.display = 'none';
+    }
+    
+    // Show parent button only if not in root
+    if (currentPath && currentPath !== '' && currentPath !== '/') {
+        parentButton.style.display = 'flex';
+    } else {
+        parentButton.style.display = 'none';
+    }
+}
+
+// Navigate to parent folder
+function navigateToParent() {
+    if (!currentPath || currentPath === '' || currentPath === '/') return;
+    
+    // Get parent path by removing the last segment
+    const segments = currentPath.split('/').filter(segment => segment !== '');
+    if (segments.length > 0) {
+        segments.pop();
+        const parentPath = segments.join('/');
+        navigateTo(parentPath);
+    } else {
+        // If no segments left, go to root
+        navigateTo('');
+    }
+}
+
+function showMoveModal(event, path, name, isDir) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    
+    if (activeModal) {
+        closeModal(activeModal);
+    }
+    
+    activeModal = 'moveModal';
+    itemToMove = path;
+    moveItemIsDir = isDir;
+    document.getElementById('moveFileName').textContent = name;
+    document.getElementById('moveModal').style.display = 'flex';
+    
+    // Reset state
+    currentTreePath = '';
+    selectedFolderPath = '';
+    creatingNewFolder = false;
+    
+    // Load folder tree
+    loadFolderTree();
+}
+
+async function loadFolderTree() {
+    const treeWrapper = document.getElementById('folderTreeWrapper');
+    const treeLoading = document.getElementById('treeLoading');
+    
+    treeWrapper.innerHTML = '<div class="folder-tree-loading" id="treeLoading"><i class="fas fa-spinner fa-spin"></i> Loading folders...</div>';
+    
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`/api/folders-tree?exclude=${encodeURIComponent(itemToMove)}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (response.status === 401) {
+            localStorage.removeItem('access_token');
+            window.location.href = '/login';
+            return;
+        }
+        
+        if (!response.ok) {
+            throw new Error('Failed to load folders');
+        }
+        
+        const folders = await response.json();
+        treeData = processTreeData(folders);
+        
+        // Display the tree
+        displayFolderTree(treeData);
+        
+        // Update breadcrumb
+        updateMoveBreadcrumb('');
+        
+        // Clear search
+        document.getElementById('treeSearch').value = '';
+        
+    } catch (error) {
+        console.error('Error loading folders:', error);
+        treeWrapper.innerHTML = `
+            <div class="folder-tree-empty">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>Error loading folders</p>
+                <button onclick="loadFolderTree()" class="retry-button">Retry</button>
+            </div>
+        `;
+    }
+}
+
+function processTreeData(folders) {
+    const processNode = (node, depth = 0) => {
+        return {
+            ...node,
+            depth: depth,
+            expanded: false,
+            visible: true,
+            children: node.children ? node.children.map(child => processNode(child, depth + 1)) : []
+        };
+    };
+    
+    return folders.map(folder => processNode(folder, 0));
+}
+
+function displayFolderTree(folders) {
+    const treeWrapper = document.getElementById('folderTreeWrapper');
+    
+    if (!folders || folders.length === 0) {
+        treeWrapper.innerHTML = `
+            <div class="folder-tree-empty">
+                <i class="fas fa-folder-open"></i>
+                <p>No folders available</p>
+                <button onclick="showCreateFolderInTree()" class="retry-button">
+                    <i class="fas fa-folder-plus"></i> Create Folder
+                </button>
+            </div>
+        `;
+        updateFolderCount(0);
+        return;
+    }
+    
+    treeWrapper.innerHTML = '';
+    
+    // Create tree items recursively
+    const createTreeItem = (folder) => {
+        const item = document.createElement('div');
+        item.className = `folder-tree-item ${folder.has_children ? 'has-children' : ''} ${folder.path === selectedFolderPath ? 'selected' : ''} ${folder.path === currentPath ? 'disabled' : ''}`;
+        item.dataset.path = folder.path;
+        item.dataset.depth = folder.depth;
+
+        // Folder content
+        item.innerHTML = `
+            <div class="folder-icon-wrapper">
+                ${folder.has_children ? `
+                    <div class="expand-icon ${folder.expanded ? 'expanded' : ''}" 
+                        onclick="toggleFolderExpansion(event, '${folder.path}')">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+                ` : ''}
+            </div>
+            <div class="folder-info" onclick="selectFolderForMove('${folder.path}', '${folder.full_path || folder.name}')">
+                <div class="folder-name">${folder.name}</div>
+                ${folder.path ? `<div class="folder-path">${folder.path}</div>` : ''}
+            </div>
+        `;
+
+        // Create children container separately
+        if (folder.children && folder.children.length > 0) {
+            const childrenContainer = document.createElement('div');
+            childrenContainer.className = 'folder-children';
+            if (folder.expanded) {
+                childrenContainer.style.display = 'block';
+                item.classList.add('expanded');
+            }
+            
+            folder.children.forEach(child => {
+                if (child.visible !== false) {
+                    childrenContainer.appendChild(createTreeItem(child));
+                }
+            });
+            
+            // Append the entire structure
+            const container = document.createElement('div');
+            container.appendChild(item);
+            container.appendChild(childrenContainer);
+            return container;
+        }
+
+        return item;
+    };
+    
+    // Add all root folders
+    folders.forEach(folder => {
+        if (folder.visible !== false) {
+            treeWrapper.appendChild(createTreeItem(folder));
+        }
+    });
+    
+    // Update folder count
+    const visibleCount = countVisibleFolders(folders);
+    updateFolderCount(visibleCount);
+}
+
+function countVisibleFolders(folders) {
+    let count = 0;
+    
+    const countVisible = (node) => {
+        if (node.visible !== false) {
+            count++;
+            if (node.children && node.expanded) {
+                node.children.forEach(child => countVisible(child));
+            }
+        }
+    };
+    
+    folders.forEach(folder => countVisible(folder));
+    return count;
+}
+
+function updateFolderCount(count) {
+    document.getElementById('folderCount').textContent = `${count} folder${count !== 1 ? 's' : ''}`;
+}
+
+function toggleFolderExpansion(event, folderPath) {
+    event.stopPropagation();
+    
+    const toggleInTree = (nodes) => {
+        for (const node of nodes) {
+            if (node.path === folderPath) {
+                node.expanded = !node.expanded;
+                return true;
+            }
+            if (node.children && node.children.length > 0) {
+                if (toggleInTree(node.children)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    
+    toggleInTree(treeData);
+    displayFolderTree(treeData);
+}
+
+function navigateTreeTo(path) {
+    currentTreePath = path;
+    updateMoveBreadcrumb(path);
+    
+    // Filter tree to show children of this path
+    filterTreeByPath(path);
+}
+
+function updateMoveBreadcrumb(path) {
+    const breadcrumb = document.getElementById('moveBreadcrumb');
+    const pathParts = path ? path.split('/').filter(p => p) : [];
+    
+    let html = `
+        <div class="breadcrumb-item-move" data-path="" onclick="navigateTreeTo('')">
+            <i class="fas fa-home"></i>
+            <span>Root</span>
+        </div>
+    `;
+    
+    let currentPath = '';
+    pathParts.forEach((part, index) => {
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        const isLast = index === pathParts.length - 1;
+        
+        html += `
+            <div class="breadcrumb-separator-move">/</div>
+            <div class="breadcrumb-item-move ${isLast ? 'current' : ''}" 
+                 data-path="${currentPath}" 
+                 onclick="navigateTreeTo('${currentPath}')">
+                <span>${part}</span>
+            </div>
+        `;
+    });
+    
+    breadcrumb.innerHTML = html;
+}
+
+function filterTreeByPath(path) {
+    const filterTree = (nodes, targetPath) => {
+        nodes.forEach(node => {
+            if (targetPath === '') {
+                // Show all root nodes
+                node.visible = true;
+                if (node.children) {
+                    filterTree(node.children, targetPath);
+                }
+            } else if (node.path === targetPath) {
+                // Show this node and its children
+                node.visible = true;
+                node.expanded = true;
+                if (node.children) {
+                    node.children.forEach(child => {
+                        child.visible = true;
+                        filterTree(child.children, '');
+                    });
+                }
+            } else if (node.path.startsWith(targetPath + '/')) {
+                // This is a descendant of the target path
+                node.visible = true;
+                if (node.children) {
+                    filterTree(node.children, targetPath);
+                }
+            } else {
+                // Hide this node
+                node.visible = false;
+                if (node.children) {
+                    filterTree(node.children, targetPath);
+                }
+            }
+        });
+    };
+    
+    filterTree(treeData, path);
+    displayFolderTree(treeData);
+}
+
+function filterFolders(searchTerm) {
+    if (!searchTerm.trim()) {
+        // Reset to current path view
+        filterTreeByPath(currentTreePath);
+        return;
+    }
+    
+    searchTerm = searchTerm.toLowerCase();
+    filteredTreeData = [];
+    
+    const searchInTree = (nodes, parentPath = '') => {
+        nodes.forEach(node => {
+            if (node.name.toLowerCase().includes(searchTerm) || 
+                (node.path && node.path.toLowerCase().includes(searchTerm))) {
+                filteredTreeData.push({
+                    ...node,
+                    parentPath: parentPath,
+                    visible: true
+                });
+            }
+            
+            if (node.children && node.children.length > 0) {
+                searchInTree(node.children, node.path);
+            }
+        });
+    };
+    
+    searchInTree(treeData);
+    displayFilteredFolders(filteredTreeData);
+}
+
+function displayFilteredFolders(folders) {
+    const treeWrapper = document.getElementById('folderTreeWrapper');
+    
+    if (folders.length === 0) {
+        treeWrapper.innerHTML = `
+            <div class="folder-tree-empty">
+                <i class="fas fa-search"></i>
+                <p>No folders found</p>
+            </div>
+        `;
+        updateFolderCount(0);
+        return;
+    }
+    
+    treeWrapper.innerHTML = '';
+    
+    folders.forEach(folder => {
+        const item = document.createElement('div');
+        item.className = `folder-tree-item ${folder.path === selectedFolderPath ? 'selected' : ''} ${folder.path === currentPath ? 'disabled' : ''}`;
+        item.dataset.path = folder.path;
+        item.dataset.depth = 0; // All filtered items at same level
+        
+        item.innerHTML = `
+            <div class="folder-icon-wrapper">
+                <i class="fas fa-folder folder-icon"></i>
+            </div>
+            <div class="folder-info" onclick="selectFolderForMove('${folder.path}', '${folder.full_path || folder.name}')">
+                <div class="folder-name">${folder.name}</div>
+                <div class="folder-path">${folder.path || 'Root'}</div>
+            </div>
+            <div class="filtered-count">in ${folder.parentPath || 'Root'}</div>
+        `;
+        
+        // Add click handler
+        item.addEventListener('click', () => {
+            if (!item.classList.contains('disabled')) {
+                selectFolderForMove(folder.path, folder.full_path || folder.name);
+            }
+        });
+        
+        treeWrapper.appendChild(item);
+    });
+    
+    updateFolderCount(folders.length);
+}
+
+function toggleFolder(button) {
+    const folderItem = button.closest('.folder-item');
+    const childrenContainer = folderItem.querySelector('.folder-children');
+    
+    if (!childrenContainer) return;
+    
+    button.classList.toggle('expanded');
+    childrenContainer.classList.toggle('expanded');
+}
+
+function selectFolderForMove(path, displayPath) {
+    // Clear previous selection
+    document.querySelectorAll('.folder-tree-item.selected').forEach(item => {
+        item.classList.remove('selected');
+    });
+    
+    // Find and select the clicked folder
+    const selector = `.folder-tree-item[data-path="${path}"]`;
+    const selectedItem = document.querySelector(selector);
+    if (selectedItem && !selectedItem.classList.contains('disabled')) {
+        selectedItem.classList.add('selected');
+    }
+    
+    // Update selected folder
+    selectedFolderPath = path;
+    
+    // Show selected folder section
+    const selectedSection = document.getElementById('selectedFolderSection');
+    const selectedPathElement = document.getElementById('selectedFolderPath');
+    
+    if (path === '') {
+        selectedPathElement.textContent = '/ (Root)';
+    } else {
+        selectedPathElement.textContent = displayPath || path;
+    }
+    
+    selectedSection.style.display = 'flex';
+    
+    // Enable move button
+    const moveConfirmBtn = document.getElementById('moveConfirmBtn');
+    moveConfirmBtn.disabled = false;
+}
+
+function showCreateFolderInTree() {
+    const inputContainer = document.getElementById('createFolderInputContainer');
+    const input = document.getElementById('newFolderName');
+    
+    creatingNewFolder = true;
+    inputContainer.style.display = 'block';
+    input.value = '';
+    input.focus();
+    
+    // Hide search if showing
+    document.getElementById('treeSearch').value = '';
+    filterTreeByPath(currentTreePath);
+}
+
+function handleFolderInputKeyPress(event) {
+    if (event.key === 'Enter') {
+        confirmCreateFolderInTree();
+    } else if (event.key === 'Escape') {
+        cancelCreateFolderInTree();
+    }
+}
+
+async function confirmCreateFolderInTree() {
+    const input = document.getElementById('newFolderName');
+    const folderName = input.value.trim();
+    
+    if (!folderName) {
+        showNotification('warning', 'Invalid Name', 'Please enter a folder name');
+        return;
+    }
+    
+    if (folderName.includes('/') || folderName.includes('\\')) {
+        showNotification('warning', 'Invalid Name', 'Folder name cannot contain slashes');
+        return;
+    }
+    
+    try {
+        const token = localStorage.getItem('access_token');
+        const formData = new FormData();
+        formData.append('folder_name', folderName);
+        formData.append('path', currentTreePath);
+        
+        const response = await fetch('/api/create-folder', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+        
+        if (response.ok) {
+            showNotification('success', 'Folder Created', `Folder "${folderName}" created successfully`);
+            cancelCreateFolderInTree();
+            loadFolderTree(); // Reload tree to show new folder
+        } else {
+            const result = await response.json();
+            showNotification('error', 'Create Failed', result.detail || 'Failed to create folder');
+        }
+    } catch (error) {
+        showNotification('error', 'Create Failed', error.message);
+    }
+}
+
+function cancelCreateFolderInTree() {
+    const inputContainer = document.getElementById('createFolderInputContainer');
+    const input = document.getElementById('newFolderName');
+    
+    creatingNewFolder = false;
+    inputContainer.style.display = 'none';
+    input.value = '';
+}
+
+async function confirmMove() {
+    if (!itemToMove || selectedFolderPath === undefined) return;
+    
+    const moveConfirmBtn = document.getElementById('moveConfirmBtn');
+    const originalText = moveConfirmBtn.innerHTML;
+    moveConfirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Moving...';
+    moveConfirmBtn.disabled = true;
+    
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('/api/move', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                source: itemToMove,
+                destination: selectedFolderPath,
+                is_dir: moveItemIsDir
+            })
+        });
+        
+        if (response.status === 401) {
+            localStorage.removeItem('access_token');
+            window.location.href = '/login';
+            return;
+        }
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showNotification('success', 'Move Successful', 'Item moved successfully!');
+            closeMoveModal();
+            loadFiles(currentPath);
+            hidePreview();
+        } else {
+            showNotification('error', 'Move Failed', result.detail || 'Failed to move item');
+        }
+    } catch (error) {
+        showNotification('error', 'Move Failed', error.message);
+    } finally {
+        itemToMove = null;
+        moveItemIsDir = false;
+        selectedFolderPath = '';
+        moveConfirmBtn.innerHTML = originalText;
+        moveConfirmBtn.disabled = false;
+    }
+}
+
+function closeMoveModal() {
+    activeModal = null;
+    itemToMove = null;
+    moveItemIsDir = false;
+    selectedFolderPath = '';
+    currentTreePath = '';
+    treeData = [];
+    filteredTreeData = [];
+    creatingNewFolder = false;
+    
+    // Clear search
+    document.getElementById('treeSearch').value = '';
+    
+    // Hide create folder input
+    cancelCreateFolderInTree();
+    
+    closeModal('moveModal');
+}
+
+function displayFiles(items) {
+    const grid = document.getElementById('filesGrid');
+    
+    if (items.length === 0) {
+        grid.innerHTML = '<div class="empty-state"><i class="fas fa-folder-open"></i><p>This folder is empty</p></div>';
+        return;
+    }
+    
+    grid.innerHTML = items.map(item => createFileCard(item)).join('');
+}
+
+function createFileCard(item) {
+    const isDir = Boolean(item.is_dir);
+    const iconClass = getFileIcon(item.extension, isDir);
+    const size = isDir ? '' : formatFileSize(item.size);
+    const modified = formatDate(item.modified);
+    
+    return `
+        <div class="file-card ${isDir ? 'folder' : 'file'}" 
+             data-path="${item.path}"
+             data-type="${isDir ? 'folder' : 'file'}"
+             onclick="handleFileClick('${item.path}', ${isDir ? 'true' : 'false'})">
+            <div class="file-icon"><i class="${iconClass}"></i></div>
+            <div class="file-info">
+                <h4 class="file-name" title="${item.name}">${item.name}</h4>
+                <div class="file-details">
+                    ${!isDir ? `<span class="file-size">${size}</span>` : '<span class="file-type">Folder</span>'}
+                    <span class="file-modified">${modified}</span>
+                </div>
+            </div>
+            <div class="file-actions">
+                ${!isDir ? `
+                <button class="action-button download" onclick="event.stopPropagation(); downloadFile('${item.path}')" 
+                        title="Download">
+                    <i class="fas fa-download"></i>
+                </button>
+                ` : ''}
+                <button class="action-button move" onclick="event.stopPropagation(); showMoveModal(event, '${item.path}', '${item.name}', ${isDir})" 
+                        title="Move">
+                    <i class="fas fa-arrows-alt"></i>
+                </button>
+                <button class="action-button delete" onclick="event.stopPropagation(); showDeleteModal(event, '${item.path}', '${item.name}')" 
+                        title="Delete">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function getFileIcon(extension, isDir) {
+    if (isDir) {
+        return 'fas fa-folder';
+    }
+
+    const iconMap = {
+        // Images
+        '.png': 'fas fa-file-image',
+        '.jpg': 'fas fa-file-image',
+        '.jpeg': 'fas fa-file-image',
+        '.gif': 'fas fa-file-image',
+        '.svg': 'fas fa-file-image',
+        '.webp': 'fas fa-file-image',
+        '.bmp': 'fas fa-file-image',
+        '.ico': 'fas fa-file-image',
+        
+        // Text files
+        '.txt': 'fas fa-file-alt',
+        '.md': 'fas fa-file-alt',
+        '.markdown': 'fas fa-file-alt',
+        '.log': 'fas fa-file-alt',
+        
+        // Code files
+        '.py': 'fas fa-file-code',
+        '.js': 'fas fa-file-code',
+        '.jsx': 'fas fa-file-code',
+        '.ts': 'fas fa-file-code',
+        '.tsx': 'fas fa-file-code',
+        '.html': 'fas fa-file-code',
+        '.htm': 'fas fa-file-code',
+        '.css': 'fas fa-file-code',
+        '.scss': 'fas fa-file-code',
+        '.sass': 'fas fa-file-code',
+        '.less': 'fas fa-file-code',
+        '.json': 'fas fa-file-code',
+        '.xml': 'fas fa-file-code',
+        '.yaml': 'fas fa-file-code',
+        '.yml': 'fas fa-file-code',
+        '.sh': 'fas fa-file-code',
+        '.bash': 'fas fa-file-code',
+        '.zsh': 'fas fa-file-code',
+        '.php': 'fas fa-file-code',
+        '.java': 'fas fa-file-code',
+        '.cpp': 'fas fa-file-code',
+        '.c': 'fas fa-file-code',
+        '.h': 'fas fa-file-code',
+        '.cs': 'fas fa-file-code',
+        '.go': 'fas fa-file-code',
+        '.rs': 'fas fa-file-code',
+        '.rb': 'fas fa-file-code',
+        '.pl': 'fas fa-file-code',
+        '.pm': 'fas fa-file-code',
+        '.sql': 'fas fa-file-code',
+        
+        // Documents
+        '.pdf': 'fas fa-file-pdf',
+        '.doc': 'fas fa-file-word',
+        '.docx': 'fas fa-file-word',
+        '.odt': 'fas fa-file-word',
+        '.rtf': 'fas fa-file-word',
+        '.xls': 'fas fa-file-excel',
+        '.xlsx': 'fas fa-file-excel',
+        '.ods': 'fas fa-file-excel',
+        '.ppt': 'fas fa-file-powerpoint',
+        '.pptx': 'fas fa-file-powerpoint',
+        '.odp': 'fas fa-file-powerpoint',
+        
+        // Archives
+        '.zip': 'fas fa-file-archive',
+        '.tar': 'fas fa-file-archive',
+        '.gz': 'fas fa-file-archive',
+        '.tgz': 'fas fa-file-archive',
+        '.bz2': 'fas fa-file-archive',
+        '.7z': 'fas fa-file-archive',
+        '.rar': 'fas fa-file-archive',
+        
+        // Audio/Video
+        '.mp3': 'fas fa-file-audio',
+        '.wav': 'fas fa-file-audio',
+        '.ogg': 'fas fa-file-audio',
+        '.flac': 'fas fa-file-audio',
+        '.mp4': 'fas fa-file-video',
+        '.avi': 'fas fa-file-video',
+        '.mkv': 'fas fa-file-video',
+        '.mov': 'fas fa-file-video',
+        '.wmv': 'fas fa-file-video',
+        '.flv': 'fas fa-file-video',
+        
+        // Config files
+        '.ini': 'fa-solid fa-cogs',
+        '.cfg': 'fa-solid fa-cogs',
+        '.conf': 'fa-solid fa-cogs',
+        '.config': 'fa-solid fa-cogs',
+
+        // Executables / packages
+        '.exe': 'fa-solid fa-box',
+        '.msi': 'fa-solid fa-box',
+        '.dmg': 'fa-solid fa-box',
+        '.app': 'fa-solid fa-box',
+        '.deb': 'fa-solid fa-box',
+        '.rpm': 'fa-solid fa-box',
+        '.appimage': 'fa-solid fa-window-restore',
+        '.iso': 'fa-solid fa-compact-disc',
+    };
+    
+    const ext = extension ? extension.toLowerCase() : '';
+    return iconMap[ext] || 'fas fa-file';
+}
+
+function getFileColorClass(extension) {
+    const colorMap = {
+        '.pdf': 'pdf',
+        '.doc': 'doc',
+        '.docx': 'doc',
+        '.txt': 'text',
+        '.py': 'code',
+        '.js': 'code',
+        '.html': 'code',
+        '.css': 'code',
+        '.jpg': 'image',
+        '.jpeg': 'image',
+        '.png': 'image',
+        '.gif': 'image',
+        '.svg': 'image',
+    };
+    return colorMap[extension] || 'default';
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function formatDate(timestamp) {
+    if (!timestamp) return 'Unknown';
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) {
+        // Try parsing as seconds if milliseconds don't work
+        const dateFromSeconds = new Date(timestamp * 1000);
+        if (!isNaN(dateFromSeconds.getTime())) {
+            return dateFromSeconds.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        return 'Unknown';
+    }
+    return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function handleFileClick(path, isDir) {
+    if (isDir === true || isDir === 'true') {
+        navigateTo(path);
+    } else {
+        showPreview(path);
+    }
+}
+
+function navigateTo(path) {
+    loadFiles(path);
+}
+
+function showPreview(filePath) {
+    const previewSidebar = document.getElementById('previewSidebar');
+    const previewContent = document.getElementById('previewContent');
+    
+    previewSidebar.classList.add('active');
+    previewContent.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading preview...</div>';
+    
+    fetchPreview(filePath);
+}
+
+async function fetchPreview(filePath) {
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`/api/preview?path=${encodeURIComponent(filePath)}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (response.status === 401) {
+            localStorage.removeItem('access_token');
+            window.location.href = '/login';
+            return;
+        }
+        
+        if (!response.ok) {
+            throw new Error('Failed to load preview');
+        }
+        
+        const data = await response.json();
+        displayPreview(data);
+    } catch (error) {
+        document.getElementById('previewContent').innerHTML = `
+            <div class="error">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>Error loading preview: ${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+function handleFileSelect() {
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
+    const filePreview = document.getElementById('filePreview');
+    const fileNamePreview = document.getElementById('fileNamePreview');
+    const fileSizePreview = document.getElementById('fileSizePreview');
+    const filePreviewIcon = document.getElementById('filePreviewIcon');
+    
+    if (file) {
+        // Show file preview
+        filePreview.style.display = 'block';
+        fileNamePreview.textContent = file.name;
+        fileSizePreview.textContent = formatFileSize(file.size);
+        
+        // Set icon based on file type
+        const extension = '.' + file.name.split('.').pop().toLowerCase();
+        const iconClass = getFileIcon(extension, false);
+        filePreviewIcon.className = iconClass;
+    } else {
+        filePreview.style.display = 'none';
+    }
+    
+    // Hide progress section if it was shown from previous upload
+    document.getElementById('progressSection').style.display = 'none';
+    document.getElementById('uploadSuccess').style.display = 'none';
+    document.getElementById('uploadError').style.display = 'none';
+}
+
+
+function displayPreview(data) {
+    const previewContent = document.getElementById('previewContent');
+    const { preview, file_info } = data;
+    
+    let content = '';
+    
+    if (preview.type === 'text') {
+        content = `
+            <div class="preview-header-info">
+                <h4>${file_info.name}</h4>
+                <p class="file-meta">${formatFileSize(file_info.size)} • ${file_info.mime_type}</p>
+            </div>
+            <pre class="text-preview">${escapeHtml(preview.content)}</pre>
+            ${preview.truncated ? '<p class="truncated-warning"><i class="fas fa-info-circle"></i> Preview truncated (file too large)</p>' : ''}
+        `;
+    } else if (preview.type === 'image') {
+        // Handle SVG and images differently
+        if (file_info.extension === '.svg') {
+            content = `
+                <div class="preview-header-info">
+                    <h4>${file_info.name}</h4>
+                    <p class="file-meta">${formatFileSize(file_info.size)} • ${file_info.mime_type}</p>
+                </div>
+                <div class="image-preview">
+                    <div style="width: 100%; max-width: 100%; overflow: auto;">
+                        ${preview.content}
+                    </div>
+                </div>
+            `;
+        } else {
+            content = `
+                <div class="preview-header-info">
+                    <h4>${file_info.name}</h4>
+                    <p class="file-meta">${formatFileSize(file_info.size)} • ${file_info.mime_type}</p>
+                </div>
+                <div class="image-preview">
+                    <img src="${preview.content}" alt="${file_info.name}" 
+                         style="max-width: 100%; height: auto; object-fit: contain;">
+                </div>
+            `;
+        }
+    } else {
+        content = `
+            <div class="preview-header-info">
+                <h4>${file_info.name}</h4>
+                <p class="file-meta">${formatFileSize(file_info.size)} • ${file_info.mime_type}</p>
+            </div>
+            <div class="generic-preview">
+                <i class="${getFileIcon(file_info.extension, false)} ${getFileColorClass(file_info.extension)}"></i>
+                <p>${preview.content}</p>
+                <button onclick="downloadFile('${file_info.path}')" class="download-full-button">
+                    <i class="fas fa-download"></i> Download File
+                </button>
+            </div>
+        `;
+    }
+    
+    previewContent.innerHTML = content;
+    
+    // Fix for SVG rendering
+    if (file_info.extension === '.svg') {
+        setTimeout(() => {
+            const svgContainer = previewContent.querySelector('.image-preview div');
+            if (svgContainer) {
+                const svg = svgContainer.querySelector('svg');
+                if (svg) {
+                    svg.style.maxWidth = '100%';
+                    svg.style.height = 'auto';
+                    svg.style.display = 'block';
+                }
+            }
+        }, 100);
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function hidePreview() {
+    document.getElementById('previewSidebar').classList.remove('active');
+}
+
+function downloadFile(path) {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        window.location.href = '/login';
+        return;
+    }
+    
+    const downloadUrl = `/download?path=${encodeURIComponent(path)}&token=${token}`;
+    window.open(downloadUrl, '_blank');
+}
+
+function showUploadModal() {
+    if (activeModal) {
+        closeModal(activeModal);
+    }
+    
+    // Make sure any existing upload is cancelled
+    if (uploadXHR && uploadXHR.readyState !== 4) {
+        uploadXHR.abort();
+    }
+    
+    // Reset everything
+    resetUploadProgress();
+    document.getElementById('filePreview').style.display = 'none';
+    document.getElementById('progressSection').style.display = 'none';
+    document.getElementById('uploadSuccess').style.display = 'none';
+    document.getElementById('uploadError').style.display = 'none';
+    document.getElementById('uploadActions').style.display = 'flex';
+    
+    // Reset the form
+    document.getElementById('uploadForm').reset();
+    
+    activeModal = 'uploadModal';
+    document.getElementById('uploadModal').style.display = 'flex';
+}
+
+function showCreateFolderModal() {
+    if (activeModal) {
+        closeModal(activeModal);
+    }
+    
+    activeModal = 'createFolderModal';
+    document.getElementById('createFolderModal').style.display = 'flex';
+}
+
+function showDeleteModal(event, path, name) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    
+    if (activeModal) {
+        closeModal(activeModal);
+    }
+    
+    activeModal = 'deleteModal';
+    fileToDelete = path;
+    document.getElementById('deleteFileName').textContent = name;
+    document.getElementById('deleteModal').style.display = 'flex';
+}
+
+function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    activeModal = null;
+    
+    if (modalId === 'uploadModal') {
+        document.getElementById('uploadForm').reset();
+    }
+    if (modalId === 'createFolderModal') {
+        document.getElementById('createFolderForm').reset();
+    }
+    if (modalId === 'moveModal') {
+        itemToMove = null;
+        moveItemIsDir = false;
+        selectedFolderPath = '';
+    }
+}
+
+function toggleSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    sidebar.classList.toggle('active');
+}
+
+async function handleUpload(e) {
+    e.preventDefault();
+    
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        window.location.href = '/login';
+        return;
+    }
+    
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Please select a file to upload');
+        return;
+    }
+    
+    // Validate file before uploading
+    const validation = validateFile(file);
+    if (!validation.valid) {
+        alert(validation.error);
+        return;
+    }
+    
+    // Reset progress
+    resetUploadProgress();
+    
+    // Get form elements
+    const uploadSubmitBtn = document.getElementById('uploadSubmitBtn');
+    const progressSection = document.getElementById('progressSection');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const uploadSpeed = document.getElementById('uploadSpeed');
+    const uploadTime = document.getElementById('uploadTime');
+    const uploadSuccess = document.getElementById('uploadSuccess');
+    const uploadError = document.getElementById('uploadError');
+    const errorMessage = document.getElementById('errorMessage');
+    const uploadActions = document.getElementById('uploadActions');
+    
+    // Show progress section
+    progressSection.style.display = 'block';
+    uploadSuccess.style.display = 'none';
+    uploadError.style.display = 'none';
+    
+    // Update UI for upload
+    uploadSubmitBtn.disabled = true;
+    uploadSubmitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+    
+    // Start upload time tracking
+    uploadStartTime = Date.now();
+    uploadLoaded = 0;
+    uploadTotal = file.size;
+    
+    // Variables for speed calculation
+    let lastLoaded = 0;
+    let lastTime = Date.now();
+    
+    // Create FormData
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('path', currentPath);
+    
+    // Use XMLHttpRequest for real progress tracking
+    uploadXHR = new XMLHttpRequest();
+    
+    // Setup progress tracking
+    uploadXHR.upload.addEventListener('progress', function(e) {
+        if (e.lengthComputable) {
+            const currentTime = Date.now();
+            const timeDiff = (currentTime - lastTime) / 1000; // in seconds
+            
+            // Calculate current speed
+            if (timeDiff > 0.1) { // Update at most every 100ms
+                const loadedDiff = e.loaded - lastLoaded;
+                const currentSpeed = loadedDiff / timeDiff; // bytes per second
+                
+                // Smooth the speed calculation
+                uploadLoaded = e.loaded;
+                const percentComplete = (e.loaded / e.total) * 100;
+                
+                // Update progress bar
+                progressBar.style.width = percentComplete + '%';
+                progressText.textContent = Math.round(percentComplete) + '%';
+                
+                // Update speed and time
+                if (currentTime - uploadStartTime > 1000) { // Wait for first second
+                    const elapsedSeconds = (currentTime - uploadStartTime) / 1000;
+                    const avgSpeed = e.loaded / elapsedSeconds;
+                    
+                    const speedText = formatSpeed(avgSpeed);
+                    uploadSpeed.textContent = `Speed: ${speedText}`;
+                    
+                    // Calculate ETA
+                    if (avgSpeed > 0) {
+                        const remainingBytes = e.total - e.loaded;
+                        const remainingSeconds = remainingBytes / avgSpeed;
+                        const timeText = formatTime(remainingSeconds);
+                        uploadTime.textContent = `Time: ${timeText}`;
+                    }
+                }
+                
+                lastLoaded = e.loaded;
+                lastTime = currentTime;
+            }
+        }
+    });
+    
+    // Handle completion
+    uploadXHR.addEventListener('load', function() {
+        clearInterval(uploadSpeedInterval);
+        
+        if (uploadXHR.status === 200) {
+            try {
+                const response = JSON.parse(uploadXHR.responseText);
+                
+                // Ensure progress bar shows 100%
+                progressBar.style.width = '100%';
+                progressText.textContent = '100%';
+                
+                // Show success message
+                setTimeout(() => {
+                    uploadSuccess.style.display = 'block';
+                    uploadActions.style.display = 'none';
+                    
+                    // Reset form after delay
+                    setTimeout(() => {
+                        closeUploadModal();
+                        loadFiles(currentPath);
+                    }, 1500);
+                }, 500); // Small delay to show 100% completion
+                
+            } catch (error) {
+                showUploadError('Error parsing server response: ' + error.message);
+            }
+        } else if (uploadXHR.status === 401) {
+            localStorage.removeItem('access_token');
+            window.location.href = '/login';
+        } else {
+            try {
+                const response = JSON.parse(uploadXHR.responseText);
+                showUploadError(response.detail || `Upload failed (${uploadXHR.status})`);
+            } catch (error) {
+                showUploadError(`Upload failed with status: ${uploadXHR.status}`);
+            }
+        }
+        
+        // Reset button
+        uploadSubmitBtn.disabled = false;
+        uploadSubmitBtn.innerHTML = '<i class="fas fa-upload"></i> Upload';
+    });
+    
+    // Handle errors
+    uploadXHR.addEventListener('error', function() {
+        clearInterval(uploadSpeedInterval);
+        showUploadError('Network error - upload failed. Check your connection.');
+        uploadSubmitBtn.disabled = false;
+        uploadSubmitBtn.innerHTML = '<i class="fas fa-upload"></i> Upload';
+    });
+    
+    // Handle abort
+    uploadXHR.addEventListener('abort', function() {
+        clearInterval(uploadSpeedInterval);
+        showUploadError('Upload cancelled');
+        uploadSubmitBtn.disabled = false;
+        uploadSubmitBtn.innerHTML = '<i class="fas fa-upload"></i> Upload';
+    });
+    
+    // Handle timeout
+    uploadXHR.timeout = 3600000; // 1 hour timeout for large files
+    uploadXHR.ontimeout = function() {
+        showUploadError('Upload timeout - connection too slow');
+        uploadSubmitBtn.disabled = false;
+        uploadSubmitBtn.innerHTML = '<i class="fas fa-upload"></i> Upload';
+    };
+    
+    // Send request
+    uploadXHR.open('POST', '/api/upload');
+    uploadXHR.setRequestHeader('Authorization', `Bearer ${token}`);
+    uploadXHR.send(formData);
+    
+    // Also update speed periodically for better UX
+    uploadSpeedInterval = setInterval(() => {
+        if (uploadLoaded > 0 && uploadStartTime) {
+            const currentTime = Date.now();
+            const elapsedSeconds = (currentTime - uploadStartTime) / 1000;
+            const avgSpeed = uploadLoaded / elapsedSeconds;
+            
+            // Update display with average speed
+            const speedText = formatSpeed(avgSpeed);
+            document.getElementById('uploadSpeed').textContent = `Speed: ${speedText}`;
+            
+            // Update ETA
+            if (avgSpeed > 0) {
+                const remainingBytes = uploadTotal - uploadLoaded;
+                const remainingSeconds = remainingBytes / avgSpeed;
+                const timeText = formatTime(remainingSeconds);
+                document.getElementById('uploadTime').textContent = `Time: ${timeText}`;
+            }
+        }
+    }, 1000);
+}
+
+function resetUploadProgress() {
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const uploadSpeed = document.getElementById('uploadSpeed');
+    const uploadTime = document.getElementById('uploadTime');
+    
+    progressBar.style.width = '0%';
+    progressText.textContent = '0%';
+    uploadSpeed.textContent = 'Speed: --';
+    uploadTime.textContent = 'Time: --';
+    
+    uploadStartTime = null;
+    uploadLoaded = 0;
+    uploadTotal = 0;
+    
+    if (uploadSpeedInterval) {
+        clearInterval(uploadSpeedInterval);
+        uploadSpeedInterval = null;
+    }
+}
+
+
+function updateUploadSpeed() {
+    if (!uploadStartTime || uploadLoaded === 0) return;
+    
+    const currentTime = Date.now();
+    const elapsedSeconds = (currentTime - uploadStartTime) / 1000;
+    
+    if (elapsedSeconds > 0) {
+        // Calculate current speed
+        const speed = uploadLoaded / elapsedSeconds; // bytes per second
+        const speedText = formatSpeed(speed);
+        
+        // Calculate ETA
+        const remainingBytes = uploadTotal - uploadLoaded;
+        const remainingSeconds = speed > 0 ? remainingBytes / speed : 0;
+        const timeText = formatTime(remainingSeconds);
+        
+        // Update display
+        document.getElementById('uploadSpeed').textContent = `Speed: ${speedText}`;
+        document.getElementById('uploadTime').textContent = `Time: ${timeText}`;
+    }
+}
+
+function formatSpeed(bytesPerSecond) {
+    if (bytesPerSecond >= 1073741824) { // 1 GB/s
+        return (bytesPerSecond / 1073741824).toFixed(2) + ' GB/s';
+    } else if (bytesPerSecond >= 1048576) { // 1 MB/s
+        return (bytesPerSecond / 1048576).toFixed(2) + ' MB/s';
+    } else if (bytesPerSecond >= 1024) { // 1 KB/s
+        return (bytesPerSecond / 1024).toFixed(2) + ' KB/s';
+    } else {
+        return bytesPerSecond.toFixed(0) + ' B/s';
+    }
+}
+
+function formatTime(seconds) {
+    if (seconds === Infinity || seconds === 0) return '--';
+    
+    if (seconds >= 86400) { // 1 day
+        const days = Math.floor(seconds / 86400);
+        const hours = Math.floor((seconds % 86400) / 3600);
+        return `${days}d ${hours}h`;
+    } else if (seconds >= 3600) {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        return `${hours}h ${minutes}m`;
+    } else if (seconds >= 60) {
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${minutes}m ${secs}s`;
+    } else if (seconds >= 10) {
+        return Math.floor(seconds) + 's';
+    } else {
+        return '<10s';
+    }
+}
+
+function showUploadError(message) {
+    const uploadError = document.getElementById('uploadError');
+    const errorMessage = document.getElementById('errorMessage');
+    const uploadActions = document.getElementById('uploadActions');
+    
+    errorMessage.textContent = message;
+    uploadError.style.display = 'block';
+    uploadActions.style.display = 'flex';
+    
+    // Scroll to error
+    uploadError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeUploadModal() {
+    // Cancel ongoing upload if exists
+    if (uploadXHR && uploadXHR.readyState !== 4) {
+        uploadXHR.abort();
+        console.log('Upload cancelled');
+    }
+    
+    // Clear interval
+    if (uploadSpeedInterval) {
+        clearInterval(uploadSpeedInterval);
+        uploadSpeedInterval = null;
+    }
+    
+    // Reset variables
+    uploadXHR = null;
+    uploadStartTime = null;
+    uploadLoaded = 0;
+    uploadTotal = 0;
+    
+    // Reset form
+    document.getElementById('uploadForm').reset();
+    document.getElementById('filePreview').style.display = 'none';
+    document.getElementById('progressSection').style.display = 'none';
+    document.getElementById('uploadSuccess').style.display = 'none';
+    document.getElementById('uploadError').style.display = 'none';
+    document.getElementById('uploadActions').style.display = 'flex';
+    
+    // Reset progress bar
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    progressBar.style.width = '0%';
+    progressText.textContent = '0%';
+    
+    // Reset button
+    const uploadSubmitBtn = document.getElementById('uploadSubmitBtn');
+    uploadSubmitBtn.disabled = false;
+    uploadSubmitBtn.innerHTML = '<i class="fas fa-upload"></i> Upload';
+    
+    // Close modal
+    closeModal('uploadModal');
+}
+async function handleCreateFolder(e) {
+    e.preventDefault();
+    
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        window.location.href = '/login';
+        return;
+    }
+    
+    const folderName = document.getElementById('folderName').value;
+    
+    const formData = new FormData();
+    formData.append('folder_name', folderName);
+    formData.append('path', currentPath);
+    
+    const button = e.target.querySelector('button[type="submit"]');
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+    button.disabled = true;
+    
+    try {
+        const response = await fetch('/api/create-folder', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+        
+        if (response.status === 401) {
+            localStorage.removeItem('access_token');
+            window.location.href = '/login';
+            return;
+        }
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showNotification('success', 'Folder Created', 'Folder created successfully!');
+            closeModal('createFolderModal');
+            loadFiles(currentPath);
+        } else {
+            alert(`Failed to create folder: ${result.detail}`);
+        }
+    } catch (error) {
+        alert('Failed to create folder: ' + error.message);
+    } finally {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+}
+
+async function confirmDelete() {
+    if (!fileToDelete) return;
+    
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('/api/delete?path=' + encodeURIComponent(fileToDelete), {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (response.status === 401) {
+            localStorage.removeItem('access_token');
+            window.location.href = '/login';
+            return;
+        }
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showNotification('success', 'Delete Successful', 'Item deleted successfully!');
+            closeModal('deleteModal');
+            loadFiles(currentPath);
+            hidePreview();
+        } else {
+            alert(`Delete failed: ${result.detail}`);
+        }
+    } catch (error) {
+        alert('Delete failed: ' + error.message);
+    } finally {
+        fileToDelete = null;
+    }
+}
+
+function refreshFiles() {
+    loadFiles(currentPath);
+}
+
+function setView(view) {
+    currentView = view;
+    localStorage.setItem('view', view);
+    
+    const grid = document.getElementById('filesGrid');
+    if (view === 'grid') {
+        grid.classList.remove('files-list');
+        grid.classList.add('files-grid');
+    } else {
+        grid.classList.remove('files-grid');
+        grid.classList.add('files-list');
+    }
+    
+    // Update active button
+    document.querySelectorAll('.view-button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === view);
+    });
+    
+    // Reload files to apply view
+    if (grid.children.length > 0) {
+        loadFiles(currentPath);
+    }
+}
+
+function updateBreadcrumb(path) {
+    const breadcrumb = document.querySelector('.breadcrumb .current');
+    if (breadcrumb) {
+        breadcrumb.textContent = path || 'root';
+    }
+}
+
+// Mobile responsive handling
+window.addEventListener('resize', function() {
+    if (window.innerWidth > 768) {
+        const sidebar = document.querySelector('.sidebar');
+        if (sidebar) sidebar.classList.remove('active');
+    }
+});
+
+document.addEventListener('click', function(event) {
+    const sidebar = document.querySelector('.sidebar');
+    const mobileToggle = document.querySelector('.mobile-menu-toggle');
+    
+    if (sidebar && sidebar.classList.contains('active') && 
+        !sidebar.contains(event.target) && 
+        mobileToggle && !mobileToggle.contains(event.target)) {
+        sidebar.classList.remove('active');
+    }
+});
+</script>
+{% endblock %}
