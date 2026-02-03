@@ -634,6 +634,10 @@ async def move_item(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Move failed: {str(e)}")
+    
+@app.get("/health")
+def health_point():
+    return {"status_code" : "200"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001, forwarded_allow_ips="*")
